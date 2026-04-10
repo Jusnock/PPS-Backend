@@ -2,6 +2,7 @@ from sqlalchemy.orm import Session
 from app.models import models
 from app.schemas import schemas
 from app.core.security import get_password_hash
+import random
 
 
 # --- EMPRESAS (COMPANIES) ---
@@ -161,14 +162,22 @@ def get_quizzes(db: Session, company_id: int = None):
     return db.query(models.Quiz).filter(models.Quiz.company_id == None).all()
 
 def create_quiz(db: Session, quiz: schemas.QuizCreate):
-    # 1. Separamos los datos del Quiz de la lista de IDs de escenarios
+    # 1. Separamos los datos del Quiz
     quiz_data = quiz.dict(exclude={"scenario_ids"})
     db_quiz = models.Quiz(**quiz_data)
     
-    # 2. Si vienen preguntas seleccionadas desde React, las buscamos en la BD y las vinculamos
-    if quiz.scenario_ids:
-        escenarios = db.query(models.Scenario).filter(models.Scenario.id.in_(quiz.scenario_ids)).all()
-        db_quiz.scenarios = escenarios
+    # 2. SELECCIÓN ALEATORIA DE 10 PREGUNTAS (El "Jigsaw Engine")
+    # Buscamos TODAS las preguntas que le pertenecen a esta empresa (o son globales)
+    preguntas_disponibles = get_scenarios(db, company_id=quiz.company_id)
+    
+    # Mezclamos la lista de preguntas disponibles como una baraja de cartas
+    random.shuffle(preguntas_disponibles)
+    
+    # Tomamos las primeras 10 (o menos, si el Admin aún no ha creado 10)
+    preguntas_seleccionadas = preguntas_disponibles[:10]
+    
+    # Asignamos estas preguntas aleatorias a la campaña
+    db_quiz.scenarios = preguntas_seleccionadas
         
     # 3. Guardamos en base de datos
     db.add(db_quiz)
